@@ -52,11 +52,19 @@
 (function(){
   "use strict";
 
-  // The client is absent when this file is opened outside Sigma. Every call
-  // below is guarded so local preview still renders.
-  var client = (window.sigmaComputing
-             && window.sigmaComputing.plugin
-             && window.sigmaComputing.plugin.client) || null;
+  // The UMD bundle defines exactly one global: `SigmaPlugin`, with the
+  // imperative client at `SigmaPlugin.client`. Verified against 1.3.2 and
+  // 1.2.0 -- `window.sigmaComputing.plugin.client` is a widely-copied myth
+  // that no published bundle has ever defined, and a plugin reading it just
+  // silently renders its fallback forever. The legacy path is kept in the
+  // chain only so an older bundle that did export it would still work.
+  var sdk = window.SigmaPlugin
+         || (window.sigmaComputing && window.sigmaComputing.plugin)
+         || null;
+  var client = (sdk && sdk.client) || null;
+
+  // Only `client` is used below, never the React hooks, so React is not
+  // needed even though the UMD build lists it as a peer.
 
   // --- Editor panel -------------------------------------------------------
   // `name` is the key this binding arrives under in the config object, and is
