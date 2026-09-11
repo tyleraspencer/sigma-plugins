@@ -542,12 +542,17 @@
   }
 
   // Bar geometry is computed from the measured plot box, so a resized element
-  // has to re-render rather than just reflow.
+  // has to re-render rather than just reflow. A window resize alone is not
+  // enough: an iframe that is laid out after the plugin's first paint renders
+  // once against a near-zero box and sticks on "+N more" until something else
+  // nudges it, so watch the wrapper itself. (Observing #wrap, not #plot --
+  // drawing rows never changes #wrap's box, so this can't feed back.)
   var t = null;
-  window.addEventListener('resize', function(){
-    clearTimeout(t);
-    t = setTimeout(recompute, 120);
-  });
+  function relayout(){ clearTimeout(t); t = setTimeout(recompute, 100); }
+  window.addEventListener('resize', relayout);
+  if (window.ResizeObserver){
+    new ResizeObserver(relayout).observe(document.getElementById('wrap'));
+  }
 })();
 </script>
 </body>
