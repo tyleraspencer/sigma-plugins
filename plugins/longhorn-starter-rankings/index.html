@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Longhorn Starter Power Rankings</title>
+<!--
+  Ranked leaderboard for a football starting lineup. Single-file Sigma
+  custom-viz plugin: no build step, no bundler.
+
+  Built for the Texas Longhorns 2026 starting roster, but nothing here is
+  Texas-specific except the default accent colour -- bind any element with a
+  name column and a numeric column and it ranks that.
+
+  The SDK's UMD bundle defines ONE global, `SigmaPlugin`, with the client at
+  `SigmaPlugin.client`. `window.sigmaComputing.plugin.client` is a widely
+  copied pattern that no published bundle defines: read it and `client` is
+  null, so the plugin renders its demo rows forever while looking perfectly
+  fine in a screenshot.
+
+  REACT IS NOT OPTIONAL, even for a plugin that uses no hooks. React is an
+  *external* of the 1.3.2 UMD build and the factory calls
+  `React.createContext` at module top level. With no `window.React` it throws
+  there -- `window.SigmaPlugin` is left as a bare `{}`, `SigmaPlugin.client`
+  is `undefined`, and the plugin renders its demo rows forever with nothing in
+  the console but one uncaught `u.createContext is not a function`. Verified
+  in a browser against 1.3.2, 2026-09-11. Load React FIRST, always.
+
+  Full API -- all 14 editor-panel types, variables, actions:
+  docs/plugin-api.md.
+-->
+<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/@sigmacomputing/plugin@1.3.2/dist/umd/sigmacomputing-plugin.umd.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,Inter,"Segoe UI",Roboto,Arial,sans-serif;
+       background:transparent;color:#333f48;overflow:hidden}
+
+  #wrap{height:100%;display:flex;flex-direction:column;padding:14px 16px 10px;gap:10px}
+
+  /* --- header --------------------------------------------------------- */
+  #top{flex:0 0 auto;display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  #ttl{font-size:14px;font-weight:800;letter-spacing:.02em;color:#333f48}
+  #sub{margin-top:2px;font-size:10px;color:#8a939b;letter-spacing:.01em}
+  #badge{flex:0 0 auto;font-size:8px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+         padding:3px 6px;border-radius:3px;background:#fef3c7;color:#92400e;display:none}
+  #badge.on{display:inline-block}
+
+  /* --- unit filter chips ---------------------------------------------- */
+  #chips{flex:0 0 auto;display:none;gap:5px;flex-wrap:wrap}
+  #chips.on{display:flex}
+  .chip{font-size:10px;font-weight:600;padding:3px 9px;border-radius:11px;cursor:pointer;
+        border:1px solid #e2e5e8;background:#fff;color:#6b747c;white-space:nowrap;
+        transition:background .15s ease,color .15s ease,border-color .15s ease}
+  .chip:hover{border-color:#c9ced3}
+  .chip.on{color:#fff;border-color:transparent}
+
+  /* --- rows ----------------------------------------------------------- */
+  #rows{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;
+        flex-direction:column;gap:1px;margin:0 -6px;padding:0 6px}
+  #rows::-webkit-scrollbar{width:6px}
+  #rows::-webkit-scrollbar-thumb{background:#dfe3e6;border-radius:3px}
+
+  .row{display:grid;grid-template-columns:26px 30px minmax(96px,1.35fr) 1fr auto;
+       gap:9px;align-items:center;padding:6px 6px;border-radius:5px;cursor:pointer;
+       transition:background .12s ease,opacity .12s ease}
+  .row:hover{background:#f6f7f8}
+  .row.sel{background:#fff4ea}
+  .row.dim{opacity:.32}
+
+  .rank{font-size:12px;font-weight:800;font-variant-numeric:tabular-nums;text-align:center;
+        color:#a8b0b7;letter-spacing:-.02em}
+  .row.top1 .rank{color:#b8860b}
+  .row.top2 .rank{color:#8d949b}
+  .row.top3 .rank{color:#a2703c}
+
+  /* jersey number, in team colour */
+  .num{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;
+       justify-content:center;font-size:11px;font-weight:800;color:#fff;
+       font-variant-numeric:tabular-nums;letter-spacing:-.03em;flex:0 0 auto}
+
+  .who{min-width:0}
+  .nm{font-size:12px;font-weight:700;color:#242c33;white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis;line-height:1.25}
+  .meta{margin-top:1px;font-size:9.5px;color:#8a939b;white-space:nowrap;
+        overflow:hidden;text-overflow:ellipsis;display:none}
+  .meta.on{display:block}
+  .pos{display:inline-block;font-size:8.5px;font-weight:800;letter-spacing:.06em;
+       padding:1px 4px;border-radius:3px;background:#eef0f2;color:#5d666e;
+       vertical-align:1px;margin-right:5px}
+
+  .barcell{min-width:0}
+  .track{background:#f0f2f4;border-radius:3px;height:16px;overflow:hidden}
+  .fill{height:100%;border-radius:3px;transition:width .3s ease}
+  .why{margin-top:2px;font-size:9px;color:#9aa2a9;white-space:nowrap;
+       overflow:hidden;text-overflow:ellipsis;display:none}
+  .why.on{display:block}
+
+  .val{font-size:12.5px;font-weight:800;color:#242c33;font-variant-numeric:tabular-nums;
+       text-align:right;min-width:34px;letter-spacing:-.02em}
+
+  /* --- empty state ---------------------------------------------------- */
+  #hint{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;
+        font-size:11px;color:#9aa2a9;line-height:1.7;padding:0 28px}
+
+  #foot{flex:0 0 auto;font-size:9px;color:#a8b0b7;display:none;letter-spacing:.01em}
+  #foot.on{display:block}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="top">
+    <div>
+      <div id="ttl">Starter Power Rankings</div>
+      <div id="sub"></div>
+    </div>
+    <div id="badge">demo data</div>
+  </div>
+  <div id="chips"></div>
+  <div id="rows"></div>
+  <div id="foot"></div>
+</div>
+<script>
+(function(){
+  "use strict";
+
+  var sdk = window.SigmaPlugin || null;
+  var client = (sdk && sdk.client) || null;
+
+  var TEXAS_ORANGE = '#bf5700';
+
+  // --- Editor panel ------------------------------------------------------
+  // Each `name` is the key the value arrives under in config AND the key a
+  // workbook spec's plugin `config` must use. Renaming one silently unbinds
+  // every workbook already using it.
+  //
+  // Only `player` and `score` are required. The rest are progressive
+  // enhancement: bind them and the rows get richer, leave them empty and the
+  // leaderboard still ranks correctly.
+  var DEFS = [
+    { type: 'element',  name: 'source' },
+    { type: 'column',   name: 'player',       source: 'source', allowMultiple: false,
+      allowedTypes: ['text'] },
+    { type: 'column',   name: 'score',        source: 'source', allowMultiple: false,
+      allowedTypes: ['number', 'integer'] },
+    { type: 'column',   name: 'position',     source: 'source', allowMultiple: false,
+      allowedTypes: ['text'] },
+    { type: 'column',   name: 'unit',         source: 'source', allowMultiple: false,
+      allowedTypes: ['text'] },
+    { type: 'column',   name: 'jersey',       source: 'source', allowMultiple: false,
+      allowedTypes: ['integer', 'number'] },
+    { type: 'column',   name: 'classYear',    source: 'source', allowMultiple: false,
+      allowedTypes: ['text'] },
+    { type: 'column',   name: 'measurements', source: 'source', allowMultiple: false,
+      allowedTypes: ['text'] },
+    { type: 'column',   name: 'accolade',     source: 'source', allowMultiple: false,
+      allowedTypes: ['text'] },
+
+    { type: 'group',    name: 'Style' },
+    { type: 'color',    name: 'accent',      source: 'Style' },
+    { type: 'dropdown', name: 'sort',        source: 'Style',
+      values: ['Score, high to low', 'Score, low to high', 'Name A-Z', 'Jersey number'],
+      defaultValue: 'Score, high to low' },
+    { type: 'toggle',   name: 'showFilters', source: 'Style', defaultValue: true },
+    { type: 'toggle',   name: 'showMeta',    source: 'Style', defaultValue: true },
+    { type: 'toggle',   name: 'showWhy',     source: 'Style', defaultValue: true },
+
+    // Two-way channel to a workbook control. Bind a real text control here and
+    // clicking a player writes their name into it, so other elements filter.
+    { type: 'variable', name: 'selected',    allowedTypes: ['text'] }
+  ];
+  if (client) client.config.configureEditorPanel(DEFS);
+
+  var state = { cfg: null, data: null, unsub: null, selected: null, unit: null };
+
+  function el(tag, cls, text){
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function show(node, on){
+    node.className = on ? node.className.replace(/\s*\bon\b/, '') + ' on'
+                        : node.className.replace(/\s*\bon\b/, '');
+  }
+  function num(v){
+    var n = Number(v);
+    if (!isFinite(n)) return '';
+    return Math.abs(n - Math.round(n)) < 0.05 ? String(Math.round(n)) : n.toFixed(1);
+  }
+
+  // Hex -> rgba, so one bound accent colour can also tint the track and the
+  // jersey badge without asking the author for three colours.
+  function tint(hex, alpha){
+    var h = String(hex || '').replace('#','');
+    if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    if (!/^[0-9a-f]{6}$/i.test(h)) return 'rgba(191,87,0,' + alpha + ')';
+    return 'rgba(' + parseInt(h.slice(0,2),16) + ',' + parseInt(h.slice(2,4),16)
+         + ',' + parseInt(h.slice(4,6),16) + ',' + alpha + ')';
+  }
+
+  // --- rendering ---------------------------------------------------------
+
+  function draw(players, isDemo){
+    var cfg = state.cfg || {};
+    var accent = cfg.accent || TEXAS_ORANGE;
+    show(document.getElementById('badge'), !!isDemo);
+
+    var host = document.getElementById('rows');
+    var chipHost = document.getElementById('chips');
+    var foot = document.getElementById('foot');
+    host.innerHTML = '';
+    chipHost.innerHTML = '';
+
+    if (!players.length){
+      show(chipHost, false);
+      show(foot, false);
+      document.getElementById('sub').textContent = '';
+      var hint = el('div', null, client && client.sigmaEnv === 'author'
+        ? 'Bind an element, a player name column and a numeric score column in the editor panel.'
+        : 'No players to rank.');
+      hint.id = 'hint';
+      host.appendChild(hint);
+      return;
+    }
+
+    // --- unit filter chips ---
+    var units = [];
+    players.forEach(function(p){
+      if (p.unit && units.indexOf(p.unit) === -1) units.push(p.unit);
+    });
+    var wantChips = cfg.showFilters !== false && units.length > 1;
+    if (state.unit && units.indexOf(state.unit) === -1) state.unit = null;
+
+    if (wantChips){
+      [null].concat(units).forEach(function(u){
+        var on = state.unit === u;
+        var chip = el('div', 'chip' + (on ? ' on' : ''), u === null ? 'All' : u);
+        if (on) chip.style.background = accent;
+        chip.addEventListener('click', function(){
+          state.unit = u;
+          recompute();
+        });
+        chipHost.appendChild(chip);
+      });
+    }
+    show(chipHost, wantChips);
+
+    var shown = state.unit ? players.filter(function(p){ return p.unit === state.unit; })
+                           : players;
+
+    // --- sort ---
+    var sorted = shown.slice();
+    if (cfg.sort === 'Name A-Z'){
+      sorted.sort(function(a,b){ return a.player.localeCompare(b.player); });
+    } else if (cfg.sort === 'Jersey number'){
+      sorted.sort(function(a,b){
+        var x = a.jersey == null ? 1e9 : a.jersey, y = b.jersey == null ? 1e9 : b.jersey;
+        return x - y || a.player.localeCompare(b.player);
+      });
+    } else if (cfg.sort === 'Score, low to high'){
+      sorted.sort(function(a,b){ return a.score - b.score || a.player.localeCompare(b.player); });
+    } else {
+      sorted.sort(function(a,b){ return b.score - a.score || a.player.localeCompare(b.player); });
+    }
+
+    // --- header summary ---
+    var avg = sorted.reduce(function(s,p){ return s + p.score; }, 0) / sorted.length;
+    var best = sorted.reduce(function(m,p){ return p.score > m.score ? p : m; }, sorted[0]);
+    document.getElementById('sub').textContent =
+      sorted.length + (sorted.length === 1 ? ' starter' : ' starters')
+      + (state.unit ? ' · ' + state.unit : '')
+      + ' · avg ' + num(avg)
+      + ' · top ' + best.player;
+
+    // Scale bars against the widest score in view, not the global max, so a
+    // filtered unit still fills the width. Guard a zero max.
+    var max = sorted.reduce(function(m,p){ return Math.max(m, p.score); }, 0) || 1;
+    var anySel = state.selected != null;
+    var showingScore = cfg.sort !== 'Name A-Z' && cfg.sort !== 'Jersey number';
+
+    // Ties share a rank -- two starters on 43.9 are both 18th, not 18th
+    // and 19th. Only meaningful while sorted by score.
+    var rank = 0, prev = null;
+    sorted.forEach(function(p, i){
+      if (showingScore){
+        if (prev === null || p.score !== prev) rank = i + 1;
+        prev = p.score;
+      } else {
+        rank = i + 1;
+      }
+
+      var isSel = anySel && p.player === state.selected;
+      var row = el('div', 'row' + (isSel ? ' sel' : (anySel ? ' dim' : ''))
+                        + (showingScore && rank <= 3 ? ' top' + rank : ''));
+
+      row.appendChild(el('div', 'rank', String(rank)));
+
+      var badge = el('div', 'num', p.jersey == null ? '—' : String(p.jersey));
+      badge.style.background = accent;
+      row.appendChild(badge);
+
+      var who = el('div', 'who');
+      who.appendChild(el('div', 'nm', p.player));
+      var meta = el('div', 'meta');
+      if (p.position){
+        var pill = el('span', 'pos', p.position);
+        pill.style.background = tint(accent, 0.1);
+        pill.style.color = accent;
+        meta.appendChild(pill);
+      }
+      var bits = [];
+      if (p.classYear) bits.push(p.classYear);
+      if (p.measurements) bits.push(p.measurements);
+      if (bits.length) meta.appendChild(document.createTextNode(bits.join(' · ')));
+      show(meta, cfg.showMeta !== false && (p.position || bits.length));
+      who.appendChild(meta);
+      row.appendChild(who);
+
+      var cell = el('div', 'barcell');
+      var track = el('div', 'track');
+      track.style.background = tint(accent, 0.08);
+      var fill = el('div', 'fill');
+      fill.style.width = Math.max(2, (p.score / max) * 100) + '%';
+      // Top three get the solid team colour; the rest a lighter tint, so the
+      // eye lands on the leaders without needing a legend.
+      fill.style.background = (showingScore && rank <= 3) ? accent : tint(accent, 0.45);
+      track.appendChild(fill);
+      cell.appendChild(track);
+      var why = el('div', 'why', p.accolade || '');
+      show(why, cfg.showWhy !== false && !!p.accolade);
+      if (p.accolade) why.title = p.accolade;
+      cell.appendChild(why);
+      row.appendChild(cell);
+
+      row.appendChild(el('div', 'val', num(p.score)));
+
+      row.title = p.player + (p.position ? '  ' + p.position : '') + '  —  ' + num(p.score);
+      // Read state.selected at click time rather than closing over `isSel`.
+      // Every draw() replaces these nodes, so a captured flag goes stale the
+      // moment a re-render lands and a fast second click would re-select
+      // instead of toggling off.
+      row.addEventListener('click', function(){
+        select(state.selected === p.player ? null : p.player);
+      });
+      host.appendChild(row);
+    });
+
+    if (state.unit && shown.length !== players.length){
+      foot.textContent = 'Showing ' + shown.length + ' of ' + players.length
+                       + ' starters · click a chip to clear';
+      show(foot, true);
+    } else {
+      show(foot, false);
+    }
+  }
+
+  // --- Write the click back into a workbook control ----------------------
+  // This is what makes the plugin cross-filter: other elements filter on the
+  // bound control. setVariable is variadic -- calling it with no values clears.
+  function select(player){
+    state.selected = player;
+    var varId = state.cfg && state.cfg.selected;
+    if (client && varId){
+      if (player === null) client.config.setVariable(varId);
+      else client.config.setVariable(varId, String(player));
+    }
+    recompute();
+  }
+
+  // Demo rows for opening this file straight in a browser. Real Texas 2026
+  // starters so the layout can be eyeballed, but the "demo data" badge is on
+  // whenever these render -- if you see it inside Sigma, the binding is wrong.
+  function synth(){
+    return [
+      ['Arch Manning',        100.0, 'QB',   'Offense',         16, 'JR', '6\'4", 222 lbs',  '1st-team All-America · 2nd-team All-SEC · No. 2 draft board'],
+      ['Cam Coleman',          96.0, 'WR',   'Offense',          8, 'JR', '6\'3", 204 lbs',  '2nd-team All-America · 1st-team All-SEC · No. 7 draft board'],
+      ['Colin Simmons',        94.4, 'JACK', 'Defense',          1, 'JR', '6\'3", 246 lbs',  '1st-team All-America · 1st-team All-SEC · No. 3 draft board'],
+      ['Trevor Goosby',        92.5, 'LT',   'Offense',         74, 'JR', '6\'7", 325 lbs',  '1st-team All-America · 1st-team All-SEC · No. 10 draft board'],
+      ['Rasheem Biles',        86.9, 'WLB',  'Defense',          3, 'SR', '6\'1", 222 lbs',  '1st-team All-America · 1st-team All-SEC · No. 54 draft board'],
+      ['Ryan Wingo',           62.0, 'WR',   'Offense',          1, 'JR', '6\'2", 214 lbs',  '3rd-team All-SEC · No. 50 draft board'],
+      ['Ryan Niblett',         56.4, 'RS',   'Special Teams',   21, 'JR', '5\'10", 189 lbs', '1st-team All-SEC'],
+      ['Jelani McDonald',      55.5, 'FS',   'Defense',          4, 'SR', '6\'2", 201 lbs',  '3rd-team All-SEC'],
+      ['Hollywood Smothers',   54.6, 'RB',   'Offense',          2, 'JR', '5\'11", 193 lbs', '3rd-team All-SEC'],
+      ['Brandon Baker',        48.3, 'RG',   'Offense',         73, 'JR', '6\'4", 315 lbs',  '3rd-team All-SEC']
+    ].map(function(r){
+      return { player:r[0], score:r[1], position:r[2], unit:r[3],
+               jersey:r[4], classYear:r[5], measurements:r[6], accolade:r[7] };
+    });
+  }
+
+  // Data arrives KEYED BY COLUMN ID -- an object of parallel arrays, not row
+  // objects. Zip by index. Capped at 25,000 values; past that use the
+  // incremental API (docs/plugin-api.md).
+  function toPlayers(data, cfg){
+    if (!data || !cfg || !cfg.player || !cfg.score) return null;
+    var names = data[cfg.player], scores = data[cfg.score];
+    if (!names || !scores) return null;
+
+    function col(key){ return (key && data[key]) || null; }
+    var positions = col(cfg.position), units = col(cfg.unit),
+        jerseys = col(cfg.jersey), classes = col(cfg.classYear),
+        sizes = col(cfg.measurements), accolades = col(cfg.accolade);
+
+    function txt(arr, i){
+      var v = arr ? arr[i] : null;
+      return v == null || v === '' ? null : String(v);
+    }
+
+    var out = [];
+    for (var i = 0; i < scores.length; i++){
+      var s = Number(scores[i]);
+      if (!isFinite(s)) continue;
+      var j = jerseys ? Number(jerseys[i]) : NaN;
+      out.push({
+        player: String(names[i] == null ? '—' : names[i]),
+        score: s,
+        position: txt(positions, i),
+        unit: txt(units, i),
+        jersey: isFinite(j) ? j : null,
+        classYear: txt(classes, i),
+        measurements: txt(sizes, i),
+        accolade: txt(accolades, i)
+      });
+    }
+    return out.length ? out : null;
+  }
+
+  function recompute(){
+    var players = toPlayers(state.data, state.cfg);
+    if (players) draw(players, false);
+    else if (state.cfg && state.cfg.source) draw([], false);  // bound, still loading
+    else draw(synth(), true);                                 // nothing bound -> demo
+  }
+
+  if (client){
+    client.config.setLoadingState(true);
+    client.config.subscribe(function(cfg){
+      state.cfg = cfg || {};
+
+      // Always release the previous element subscription before opening a new
+      // one, or re-binding the source leaks a listener that keeps overwriting
+      // state.data with the old element's rows.
+      if (state.unsub){ state.unsub(); state.unsub = null; }
+      state.data = null;
+
+      if (state.cfg.source){
+        state.unsub = client.elements.subscribeToElementData(
+          state.cfg.source,
+          function(d){ state.data = d; client.config.setLoadingState(false); recompute(); });
+      } else {
+        client.config.setLoadingState(false);
+      }
+
+      // The CURRENT value of a variable lives at .defaultValue.value, despite
+      // the name. Reading `.value` directly gets you undefined.
+      if (state.cfg.selected){
+        var v = client.config.getVariable(state.cfg.selected);
+        state.selected = (v && v.defaultValue && v.defaultValue.value) || null;
+      }
+      recompute();
+    });
+  } else {
+    recompute();   // opened directly in a browser -- render the demo rows
+  }
+
+  // Sigma documents no resize event and no auto-height, so watch the iframe
+  // ourselves and re-layout.
+  //
+  // The naive version -- `new ResizeObserver(recompute).observe(document.body)`
+  // -- is an infinite loop: recompute() rebuilds the rows *inside* the observed
+  // element, which fires the observer, which recomputes. The page pins a core
+  // and stops responding to clicks, with no error anywhere. So: ignore
+  // callbacks where the box didn't actually change size, and coalesce the rest
+  // into one frame.
+  if (window.ResizeObserver){
+    var lastW = 0, lastH = 0, queued = false;
+    new ResizeObserver(function(){
+      var w = document.body.clientWidth, h = document.body.clientHeight;
+      if (w === lastW && h === lastH) return;
+      lastW = w; lastH = h;
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(function(){ queued = false; recompute(); });
+    }).observe(document.body);
+  }
+})();
+</script>
+</body>
+</html>
