@@ -8,8 +8,10 @@
   A Sigma custom-viz plugin: one self-contained file, no build step.
 
   The SDK is loaded from unpkg as a UMD bundle and read off
-  window.sigmaComputing.plugin.client. Pin a version (…/@sigmacomputing/plugin@1.3.2)
-  if you want deploys to stop moving under you.
+  window.SigmaPlugin.client -- see the note by `var sdk` below, because the
+  commonly-copied global is wrong. Pin a version
+  (…/@sigmacomputing/plugin@1.3.2) if you want deploys to stop moving
+  under you.
 
   Three things this file demonstrates, all of which you want in any plugin:
     1. configureEditorPanel  -- declares the bindings Sigma shows in the editor
