@@ -1,0 +1,43 @@
+category,segment,value
+West,Audio,1284000
+West,Charging,921000
+West,Wearables,608000
+West,Storage,441000
+West,Cables,302000
+West,Mounts,184000
+West,Adapters,96000
+Northeast,Audio,963000
+Northeast,Charging,584000
+Northeast,Wearables,718000
+Northeast,Storage,263000
+Northeast,Cables,412000
+Northeast,Mounts,121000
+Northeast,Adapters,74000
+Southeast,Audio,742000
+Southeast,Charging,661000
+Southeast,Wearables,381000
+Southeast,Storage,394000
+Southeast,Cables,213000
+Southeast,Mounts,152000
+Southeast,Adapters,88000
+Midwest,Audio,521000
+Midwest,Charging,472000
+Midwest,Wearables,438000
+Midwest,Storage,179000
+Midwest,Cables,163000
+Midwest,Mounts,94000
+Midwest,Adapters,61000
+Mountain,Audio,284000
+Mountain,Charging,193000
+Mountain,Wearables,331000
+Mountain,Storage,118000
+Mountain,Cables,104000
+Mountain,Mounts,58000
+Mountain,Adapters,39000
+Pacific Northwest,Audio,198000
+Pacific Northwest,Charging,241000
+Pacific Northwest,Wearables,156000
+Pacific Northwest,Storage,87000
+Pacific Northwest,Cables,71000
+Pacific Northwest,Mounts,44000
+Pacific Northwest,Adapters,27000
